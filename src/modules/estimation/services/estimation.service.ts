@@ -316,8 +316,8 @@ It should look like the following format, do not use bold styling for any of the
         Generate a JSON response with an array of objects. Each object should have the following fixed structure:
         [
           {
-              "title": "scope of work title",
-              "details": "Scope of work details"
+              "title": "scope of work title (String)",
+              "details": "Scope of work detail (String)"
           },
           write other's
         ]
@@ -369,8 +369,8 @@ It should look like the following format, do not use bold styling for any of the
         [
           {
               "scopeOfWorkId": "Scope of work id",
-              "title": "Deliverable title",
-              "details": "Deliverable details"
+              "title": "Deliverable title (String)",
+              "details": "Deliverable detail (String)"
           },
           write other's
         ]
@@ -426,8 +426,8 @@ It should look like the following format, do not use bold styling for any of the
         [
           {
               "deliverableId": "deliverable id",
-              "title": "Task title",
-              "subTasks": ["Sub Task 1", "Sub Task 2", "Sub Task.... N"]
+              "title": "Task title (String)",
+              "subTasks": ["Sub Task 1 (String)", "Sub Task 2(String)", "Sub Task.... N"]
           },
           write other's
         ]
