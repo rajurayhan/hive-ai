@@ -14,6 +14,8 @@ export const EnvironmentVariablesValidation = z.object({
   TLDV_API_KEY: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_ASSISTANT_ID: z.string().min(1),
+  PAYROLL_USER_X_AUTH_USER: z.string().min(1),
+  PAYROLL_USER_X_AUTH_TOKEN: z.string().min(1),
 });
 
 export type TEnvironmentVariables = z.infer<typeof EnvironmentVariablesValidation>;

@@ -8,6 +8,8 @@ import { MeetingTranscriptEntity } from '../entities/MeetingTranscript.entity';
 import { DeliverableEntity } from '../entities/Deliberable.entity';
 import { ScopeOfWorkEntity } from '../entities/ScopeOfWork.entity';
 import { ProblemAndGoalEntity } from '../entities/ProblemsAndGoals.entity';
+import { AssociateEntity } from '../entities/Associate.entity';
+import { EntityList } from '../entities/entity.setup';
 
 @Global()
 @Module({
@@ -28,15 +30,7 @@ import { ProblemAndGoalEntity } from '../entities/ProblemsAndGoals.entity';
                     extra: {
                         charset: 'utf8_general_ci',
                     },
-                    entities: [
-                      UserEntity,
-                      ServiceScopesEntity,
-                      MeetingSummary,
-                      MeetingTranscriptEntity,
-                      DeliverableEntity,
-                      ProblemAndGoalEntity,
-                      ScopeOfWorkEntity,
-                    ],
+                    entities: EntityList,
                 };
             },
         }),

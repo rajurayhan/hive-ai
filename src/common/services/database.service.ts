@@ -8,6 +8,7 @@ import { ServiceScopesEntity } from '../entities/ServiceScopes.entity';
 import { DeliverableEntity } from '../entities/Deliberable.entity';
 import { ScopeOfWorkEntity } from '../entities/ScopeOfWork.entity';
 import { ProblemAndGoalEntity } from '../entities/ProblemsAndGoals.entity';
+import { AssociateEntity } from '../entities/Associate.entity';
 
 @Injectable()
 export class DatabaseService {
@@ -21,6 +22,9 @@ export class DatabaseService {
 
     get serviceScopeRepo(): Repository<ServiceScopesEntity> {
         return this.getRepo(ServiceScopesEntity);
+    }
+    get associateRepo(): Repository<AssociateEntity> {
+        return this.getRepo(AssociateEntity);
     }
     get problemAndGoalRepo(): Repository<ProblemAndGoalEntity> {
         return this.getRepo(ProblemAndGoalEntity);

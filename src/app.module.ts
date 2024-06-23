@@ -3,6 +3,9 @@ import { CommonServiceModule } from './common/modules/common-service.module';
 import { EnvConfigModule } from './common/modules/env-config.module';
 import { MysqlConfigModule } from './common/modules/mysql-config.module';
 import { EstimationModule } from './modules/estimation/estimation.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { SchedulerModule } from './modules/schedular';
 
 
 @Module({
@@ -10,7 +13,10 @@ import { EstimationModule } from './modules/estimation/estimation.module';
     EnvConfigModule,
     CommonServiceModule,
     MysqlConfigModule,
-    EstimationModule
+    EstimationModule,
+    EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
+    SchedulerModule
   ],
   controllers: [],
   providers: [],
