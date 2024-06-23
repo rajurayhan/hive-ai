@@ -23,6 +23,7 @@ export class AssociatesSyncService {
         }
       });
       const response = await fetchRequest.json()
+      console.log('response',response);
       for(const user of response?.data || []){
         this.databaseService.associateRepo.upsert({
           id: user.id,
