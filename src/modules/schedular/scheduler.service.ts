@@ -9,7 +9,7 @@ export class SchedulerService {
     constructor(
         private readonly eventEmitter: EventEmitter2,
     ) {}
-    @Cron(CronExpression.EVERY_10_SECONDS, {
+    @Cron(CronExpression.EVERY_5_MINUTES, {
         timeZone: 'GMT',
         name: ENUMS.EventEmitterEnum.ASSOCIATES_SYNC,
     })
