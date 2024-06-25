@@ -26,7 +26,8 @@ export class AssociatesSyncService {
       for(const user of response?.data || []){
         this.databaseService.associateRepo.upsert({
           id: user.id,
-          name: user.username,
+          userName: user.username,
+          name: user.name,
           email: user.email,
           hourlyRate: user.hourly_rate,
         },['id','email']).then().catch()

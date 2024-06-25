@@ -10,6 +10,9 @@ export class AssociateEntity {
   id: number;
 
   @Column({ type: 'varchar', length: 255 })
+  userName: string;
+
+  @Column({ type: 'varchar', length: 255 })
   name: string;
 
   @Column({ type: 'varchar', length: 255, unique: true })
