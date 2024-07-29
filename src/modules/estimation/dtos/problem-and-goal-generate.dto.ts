@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { RetryDto } from './retry.dto';
 
-export class ProblemAndGoalGenerateDto {
+export class ProblemAndGoalGenerateDto extends RetryDto{
     @ApiProperty({ type: String, description: 'Thread Id' })
     @IsString()
     @IsNotEmpty()
@@ -12,8 +13,9 @@ export class ProblemAndGoalGenerateDto {
     @IsNotEmpty()
     assistantId: string;
 
-    @ApiProperty({ type: String })
-    @IsString()
+    @ApiProperty({ type: String, isArray: true })
+    @IsString({each: true})
+    @IsArray()
     @IsNotEmpty()
-    prompt: string;
+    prompts: string[];
 }

@@ -5,6 +5,8 @@ import swagger from './common/swagger/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  //const server = app.getHttpServer()
+  //server.setTimeout(1000*60*5); //5 minutes
   const configService = app.get(EnvConfigService);
   const port = configService.get('APP_PORT');
   const docTag = `/docs`;

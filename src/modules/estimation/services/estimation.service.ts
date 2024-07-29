@@ -108,19 +108,24 @@ export class EstimationService {
   }
 
   async problemAndGoalGenerate(problemAndGoalGenerateDto: ProblemAndGoalGenerateDto){
-    await this.openai.beta.threads.messages.create(
-      problemAndGoalGenerateDto.threadId,
-      { role: 'assistant', 'content': problemAndGoalGenerateDto.prompt}
-    )
-    await this.openai.beta.threads.messages.create(
-      problemAndGoalGenerateDto.threadId,
-      { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'}
-    )
-    const data = await this.runThread(problemAndGoalGenerateDto.assistantId, problemAndGoalGenerateDto.threadId);
+    const output = [];
+    for (const prompt of problemAndGoalGenerateDto.prompts) {
+      await this.openai.beta.threads.messages.create(
+        problemAndGoalGenerateDto.threadId,
+        { role: 'assistant', 'content': prompt}
+      )
+      await this.openai.beta.threads.messages.create(
+        problemAndGoalGenerateDto.threadId,
+        { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'}
+      )
+      const data = await this.runThread(problemAndGoalGenerateDto.assistantId, problemAndGoalGenerateDto.threadId);
+      output.push(data)
+    }
+
     return {
       status: 200,
       data: {
-        problemAndGoals: data,
+        problemAndGoals: output.join('\n'),
       }
     }
   }
@@ -131,33 +136,51 @@ export class EstimationService {
           serviceId: scopeOfWorkGenerateDto.serviceId
         }
       });
-      const serviceScopesJson = JSON.stringify(serviceScopes.map(scope=>({
-        scopeId: scope.id,
-        title: String(scope.name).replace(/<\/?[^>]+(>|$)/g, ""),
-      })));
 
       await this.openai.beta.threads.messages.create(
         scopeOfWorkGenerateDto.threadId,
         { role: 'assistant', 'content': scopeOfWorkGenerateDto.prompt}
-      )
-      await this.openai.beta.threads.messages.create(
-        scopeOfWorkGenerateDto.threadId,
-        { role: 'user', 'content': `My existing scope of work list is: ${serviceScopesJson}. You need to create a new scope of work list without my list.`}
-      )
-      await this.openai.beta.threads.messages.create(
-        scopeOfWorkGenerateDto.threadId,
-        { role: 'assistant', 'content': `
-        Generate a JSON response with an array of objects. Each object should have the following fixed structure:
-        [
-          {
-              "title": "scope of work title (String)",
-              "details": "Scope of work detail (String)"
-          },
-          write other's
-        ]
-        Make sure the output structure does not change in each request.
-      `}
-      )
+      );
+      if(!scopeOfWorkGenerateDto.retry){
+        const serviceScopesJson = JSON.stringify(serviceScopes.map(scope=>({
+          scopeId: scope.id,
+          title: String(scope.name).replace(/<\/?[^>]+(>|$)/g, ""),
+        })));
+        await this.openai.beta.threads.messages.create(
+          scopeOfWorkGenerateDto.threadId,
+          { role: 'user', 'content': `My existing scope of work list is: ${serviceScopesJson}. You need to create a new scope of work list without my list.`}
+        )
+        await this.openai.beta.threads.messages.create(
+          scopeOfWorkGenerateDto.threadId,
+          { role: 'assistant', 'content': `
+            Generate a JSON response with an array of objects. Each object should have the following fixed structure:
+            [
+              {
+                  "title": "scope of work title (String)",
+                  "details": "Scope of work detail (String)"
+              },
+              write other's
+            ]
+            Make sure the output structure does not change in each request.
+          `}
+        )
+      }else{
+        await this.openai.beta.threads.messages.create(
+          scopeOfWorkGenerateDto.threadId,
+          { role: 'assistant', 'content': `
+            Your result is in the wrong format. Please follow the structure:
+            [
+              {
+                  "title": "scope of work title (String)",
+                  "details": "Scope of work detail (String)"
+              },
+              write other's
+            ]
+            Make sure the output structure does not change in each request.
+          `}
+        )
+      }
+
       const data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, '{ "type": "json_object" }');
       return {
         status: 200,
@@ -178,39 +201,59 @@ export class EstimationService {
           serviceScopeId: IsNull()
         }
       });
-      const scopeOfWorkChunk = chunkArray(scopeOfWorks, 20);
-      for(let i = 0; i < scopeOfWorkChunk.length; i += scopeOfWorkChunk.length) {
-        const scopes= scopeOfWorkChunk[i];
-        const scopeData = scopes.map((scope)=>({
-          scopeOfWorkId:scope.id,
-          title:scope.title,
-          scopeText: scope.scopeText
-        }));
+
+      if(!deliverablesGenerateDto.retry){
+        const scopeOfWorkChunk = chunkArray(scopeOfWorks, 20);
+        for(let i = 0; i < scopeOfWorkChunk.length; i += scopeOfWorkChunk.length) {
+          const scopes= scopeOfWorkChunk[i];
+          const scopeData = scopes.map((scope)=>({
+            scopeOfWorkId:scope.id,
+            title:scope.title,
+            scopeText: scope.scopeText
+          }));
+          await this.openai.beta.threads.messages.create(
+            deliverablesGenerateDto.threadId,
+            { role: 'user', 'content': `${i===0?`I am sending you my scope of work list with multiple steps. STEP-${i+1}`:'I am sending you my scope of work list'} : ${JSON.stringify(scopeData)}.`}
+          )
+        }
         await this.openai.beta.threads.messages.create(
           deliverablesGenerateDto.threadId,
-          { role: 'user', 'content': `${i===0?`I am sending you my scope of work list with multiple steps. STEP-${i+1}`:'I am sending you my scope of work list'} : ${JSON.stringify(scopeData)}.`}
+          { role: 'assistant', 'content': `${deliverablesGenerateDto.prompt}. You need to create multiple deliverable list for each scope of work`}
+        )
+
+        await this.openai.beta.threads.messages.create(
+          deliverablesGenerateDto.threadId,
+          { role: 'assistant', 'content': `
+            Return a single list of JSON objects with the structure. Each object should have the following fixed structure:
+            [
+              {
+                  "scopeOfWorkId": "Scope of work id",
+                  "title": "Deliverable title (String)",
+                  "details": "Deliverable detail (String)"
+              },
+              write other's
+            ]
+            Make sure the output structure does not change in each request.
+          `}
+        )
+      }else{
+        await this.openai.beta.threads.messages.create(
+          deliverablesGenerateDto.threadId,
+          { role: 'assistant', 'content': `
+            Your result is in the wrong format. Please follow the structure:
+            [
+              {
+                  "scopeOfWorkId": "Scope of work id",
+                  "title": "Deliverable title (String)",
+                  "details": "Deliverable detail (String)"
+              },
+              write other's
+            ]
+            Make sure the output structure does not change in each request.
+          `}
         )
       }
-      await this.openai.beta.threads.messages.create(
-        deliverablesGenerateDto.threadId,
-        { role: 'assistant', 'content': `${deliverablesGenerateDto.prompt}. You need to create multiple deliverable list for each scope of work`}
-      )
 
-      await this.openai.beta.threads.messages.create(
-        deliverablesGenerateDto.threadId,
-        { role: 'assistant', 'content': `
-        Return a single list of JSON objects with the structure. Each object should have the following fixed structure:
-        [
-          {
-              "scopeOfWorkId": "Scope of work id",
-              "title": "Deliverable title (String)",
-              "details": "Deliverable detail (String)"
-          },
-          write other's
-        ]
-        Make sure the output structure does not change in each request.
-      `}
-      )
       const deliverables = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, '{ "type": "json_object" }');
       return {
         status: 200,
@@ -235,39 +278,69 @@ export class EstimationService {
           serviceScopeId: IsNull()
         }
       });
-      const deliverablesChunk = chunkArray(deliverables, 20);
-      for(let i = 0; i < deliverablesChunk.length; i += deliverablesChunk.length) {
-        const deliverable= deliverablesChunk[i];
-        const deliverableData = deliverable.map((deliverable)=>({
-          deliverableId:deliverable.id,
-          title:deliverable.title,
-          details: deliverable.deliverablesText
-        }));
+      if(!tasksGenerateDto.retry) {
+
+
+        const deliverablesChunk = chunkArray(deliverables, 20);
+        for (let i = 0; i < deliverablesChunk.length; i += deliverablesChunk.length) {
+          const deliverable = deliverablesChunk[i];
+          const deliverableData = deliverable.map((deliverable) => ({
+            deliverableId: deliverable.id,
+            title: deliverable.title,
+            details: deliverable.deliverablesText
+          }));
+          await this.openai.beta.threads.messages.create(
+            tasksGenerateDto.threadId,
+            {
+              role: 'user',
+              'content': `${i === 0 ? `I am sending you my deliverable list with multiple steps. STEP-${i + 1}` : 'I am sending you my scope of work list'} : ${JSON.stringify(deliverableData)}.`
+            }
+          )
+        }
         await this.openai.beta.threads.messages.create(
           tasksGenerateDto.threadId,
-          { role: 'user', 'content': `${i===0?`I am sending you my deliverable list with multiple steps. STEP-${i+1}`:'I am sending you my scope of work list'} : ${JSON.stringify(deliverableData)}.`}
+          {
+            role: 'assistant',
+            'content': `${tasksGenerateDto.prompt}. You need to create multiple tasks and subtasks list for each deliverable`
+          }
+        )
+
+        await this.openai.beta.threads.messages.create(
+          tasksGenerateDto.threadId,
+          {
+            role: 'assistant', 'content': `
+              Return a single list of JSON objects with the structure. Each object should have the following fixed structure:
+              [
+                {
+                    "deliverableId": "deliverable id",
+                    "title": "Task title (String)",
+                    "subTasks": ["Sub Task 1 (String)", "Sub Task 2(String)", "Sub Task.... N"]
+                },
+                write other's
+              ]
+              Make sure the output structure does not change in each request.
+            `
+          }
+        )
+      }else{
+        await this.openai.beta.threads.messages.create(
+          tasksGenerateDto.threadId,
+          {
+            role: 'assistant', 'content': `
+              Your result is in the wrong format. Please follow the structure:
+              [
+                {
+                    "deliverableId": "deliverable id",
+                    "title": "Task title (String)",
+                    "subTasks": ["Sub Task 1 (String)", "Sub Task 2(String)", "Sub Task.... N"]
+                },
+                write other's
+              ]
+              Make sure the output structure does not change in each request.
+            `
+          }
         )
       }
-      await this.openai.beta.threads.messages.create(
-        tasksGenerateDto.threadId,
-        { role: 'assistant', 'content': `${tasksGenerateDto.prompt}. You need to create multiple tasks and subtasks list for each deliverable`}
-      )
-
-      await this.openai.beta.threads.messages.create(
-        tasksGenerateDto.threadId,
-        { role: 'assistant', 'content': `
-        Return a single list of JSON objects with the structure. Each object should have the following fixed structure:
-        [
-          {
-              "deliverableId": "deliverable id",
-              "title": "Task title (String)",
-              "subTasks": ["Sub Task 1 (String)", "Sub Task 2(String)", "Sub Task.... N"]
-          },
-          write other's
-        ]
-        Make sure the output structure does not change in each request.
-      `}
-      )
       const tasks = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
       return {
         status: 200,

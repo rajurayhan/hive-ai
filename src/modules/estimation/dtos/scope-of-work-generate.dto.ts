@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { RetryDto } from './retry.dto';
 
-export class ScopeOfWorkGenerateDto {
+export class ScopeOfWorkGenerateDto extends RetryDto{
     @ApiProperty({ type: String, description: 'Thread Id' })
     @IsString()
     @IsNotEmpty()
