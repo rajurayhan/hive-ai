@@ -9,6 +9,7 @@ import { DeliverablesGenerateDto } from '../dtos/deliverables-generate.dto';
 import { chunkArray } from '../../../common/functions';
 import { IsNull } from 'typeorm';
 import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
+import { reduce } from 'rxjs';
 
 
 @Injectable()
@@ -89,18 +90,36 @@ export class EstimationService {
 
   async transcriptGenerate(transcriptGenerateDto: TranscriptGenerateDto){
     const assistantId = this.envConfigService.get('OPENAI_ASSISTANT_ID')
+
+    const userInput = transcriptGenerateDto.transcripts.reduce((acc, value, index)=>{
+      if(transcriptGenerateDto.transcripts.length > 1){
+        return [...acc, { role: 'user', content: `I am sending you my transcript with multiple steps. STEP-${index} ${value}`}];
+      }else{
+        return [{ role: 'user', content: value}];
+      }
+    },[])
+
     const thread = await this.openai.beta.threads.create({
-      messages: [
-        { role: 'user', content: transcriptGenerateDto.transcript},
-        { role: 'assistant', content: transcriptGenerateDto.prompt},
-        { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'},
-      ]
+      messages: userInput
     })
-    const data = await this.runThread(assistantId, thread.id);
+
+    const output = [];
+    for (const prompt of transcriptGenerateDto.prompts) {
+      await this.openai.beta.threads.messages.create(
+        thread.id,
+        { role: 'assistant', 'content': prompt},
+      )
+      await this.openai.beta.threads.messages.create(
+        thread.id,
+        { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'}
+      )
+      const data = await this.runThread(assistantId, thread.id);
+      output.push(data)
+    }
     return {
       status: 200,
       data: {
-        summery: data,
+        summery: output.join('\n'),
         threadId: thread.id,
         assistantId,
       }
