@@ -148,27 +148,37 @@ export class EstimationService {
       }
     }
   }
-  async scopeOfWorkGenerate(scopeOfWorkGenerateDto: ScopeOfWorkGenerateDto){
-    try{
-      const serviceScopes = await this.databaseService.serviceScopeRepo.find({
-        where: {
-          serviceId: scopeOfWorkGenerateDto.serviceId
-        }
-      });
-
+  async scopeOfWorkResultVerify(scopeOfWorkGenerateDto: ScopeOfWorkGenerateDto,data: any){
+    if(!Array.isArray(data) || !data?.[0]?.['title']){
+      console.log('scopeOfWorkResultVerify.not matched...',data);
       await this.openai.beta.threads.messages.create(
         scopeOfWorkGenerateDto.threadId,
-        { role: 'assistant', 'content': scopeOfWorkGenerateDto.prompt}
-      );
-      if(!scopeOfWorkGenerateDto.retry){
-        const serviceScopesJson = JSON.stringify(serviceScopes.map(scope=>({
-          scopeId: scope.id,
-          title: String(scope.name).replace(/<\/?[^>]+(>|$)/g, ""),
-        })));
+        { role: 'assistant', 'content': `
+            Your result is in the wrong format. Please follow the structure:
+            [
+              {
+                  "title": "scope of work title (String)",
+                  "details": "Scope of work detail (String)"
+              },
+              write other's
+            ]
+            Make sure the output structure does not change in each request.
+          `}
+      )
+      data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, '{ "type": "json_object" }');
+      return this.scopeOfWorkResultVerify(scopeOfWorkGenerateDto, data);
+    }else{
+      return data;
+    }
+  }
+  async scopeOfWorkGenerate(scopeOfWorkGenerateDto: ScopeOfWorkGenerateDto){
+    try{
+      const result = []
+      for(const prompt of scopeOfWorkGenerateDto.prompts){
         await this.openai.beta.threads.messages.create(
           scopeOfWorkGenerateDto.threadId,
-          { role: 'user', 'content': `My existing scope of work list is: ${serviceScopesJson}. You need to create a new scope of work list without my list.`}
-        )
+          { role: 'assistant', 'content': prompt}
+        );
         await this.openai.beta.threads.messages.create(
           scopeOfWorkGenerateDto.threadId,
           { role: 'assistant', 'content': `
@@ -183,28 +193,15 @@ export class EstimationService {
             Make sure the output structure does not change in each request.
           `}
         )
-      }else{
-        await this.openai.beta.threads.messages.create(
-          scopeOfWorkGenerateDto.threadId,
-          { role: 'assistant', 'content': `
-            Your result is in the wrong format. Please follow the structure:
-            [
-              {
-                  "title": "scope of work title (String)",
-                  "details": "Scope of work detail (String)"
-              },
-              write other's
-            ]
-            Make sure the output structure does not change in each request.
-          `}
-        )
+        let data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, '{ "type": "json_object" }');
+        result.push(...await this.scopeOfWorkResultVerify(scopeOfWorkGenerateDto,data))
+
       }
 
-      const data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, '{ "type": "json_object" }');
       return {
         status: 200,
         data: {
-          scopeOfWork: data,
+          scopeOfWork: result,
         }
       }
     }catch (e){
@@ -221,25 +218,26 @@ export class EstimationService {
         }
       });
 
-      if(!deliverablesGenerateDto.retry){
-        const scopeOfWorkChunk = chunkArray(scopeOfWorks, 20);
-        for(let i = 0; i < scopeOfWorkChunk.length; i += scopeOfWorkChunk.length) {
-          const scopes= scopeOfWorkChunk[i];
-          const scopeData = scopes.map((scope)=>({
-            scopeOfWorkId:scope.id,
-            title:scope.title,
-            scopeText: scope.scopeText
-          }));
-          await this.openai.beta.threads.messages.create(
-            deliverablesGenerateDto.threadId,
-            { role: 'user', 'content': `${i===0?`I am sending you my scope of work list with multiple steps. STEP-${i+1}`:'I am sending you my scope of work list'} : ${JSON.stringify(scopeData)}.`}
-          )
-        }
+      const scopeOfWorkChunk = chunkArray(scopeOfWorks, 20);
+      for(let i = 0; i < scopeOfWorkChunk.length; i += scopeOfWorkChunk.length) {
+        const scopes= scopeOfWorkChunk[i];
+        const scopeData = scopes.map((scope)=>({
+          scopeOfWorkId:scope.id,
+          title:scope.title,
+          scopeText: scope.scopeText
+        }));
         await this.openai.beta.threads.messages.create(
           deliverablesGenerateDto.threadId,
-          { role: 'assistant', 'content': `${deliverablesGenerateDto.prompt}. You need to create multiple deliverable list for each scope of work`}
+          { role: 'user', 'content': `${i===0?`I am sending you my scope of work list with multiple steps. STEP-${i+1}`:'I am sending you my scope of work list'} : ${JSON.stringify(scopeData)}.`}
         )
+      }
 
+      const result = []
+      for(const prompt of deliverablesGenerateDto.prompts){
+        await this.openai.beta.threads.messages.create(
+          deliverablesGenerateDto.threadId,
+          { role: 'assistant', 'content': `${prompt}`}
+        )
         await this.openai.beta.threads.messages.create(
           deliverablesGenerateDto.threadId,
           { role: 'assistant', 'content': `
@@ -255,10 +253,31 @@ export class EstimationService {
             Make sure the output structure does not change in each request.
           `}
         )
-      }else{
-        await this.openai.beta.threads.messages.create(
-          deliverablesGenerateDto.threadId,
-          { role: 'assistant', 'content': `
+        let data = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, '{ "type": "json_object" }');
+        result.push(...await this.deliverablesResultVerify(deliverablesGenerateDto,data))
+
+      }
+
+      return {
+        status: 200,
+        data: {
+          deliverables: (result as any[]).map(deliverable=>({
+            ...deliverable,
+            scopeOfWorkId: Number(String(deliverable.scopeOfWorkId).split('-')[0]),
+          }))
+          ,
+        }
+      }
+    }catch (e){
+      console.log('e',e);
+    }
+  }
+  async deliverablesResultVerify(deliverablesGenerateDto: DeliverablesGenerateDto,data: any){
+    if(!Array.isArray(data) || !data?.[0]?.['title']){
+      console.log('deliverablesResultVerify. not matched...',data);
+      await this.openai.beta.threads.messages.create(
+        deliverablesGenerateDto.threadId,
+        { role: 'assistant', 'content': `
             Your result is in the wrong format. Please follow the structure:
             [
               {
@@ -270,22 +289,11 @@ export class EstimationService {
             ]
             Make sure the output structure does not change in each request.
           `}
-        )
-      }
-
-      const deliverables = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, '{ "type": "json_object" }');
-      return {
-        status: 200,
-        data: {
-          deliverables: (deliverables as any[]).map(deliverable=>({
-            ...deliverable,
-            scopeOfWorkId: Number(String(deliverable.scopeOfWorkId).split('-')[0]),
-          }))
-          ,
-        }
-      }
-    }catch (e){
-      console.log('e',e);
+      )
+      data = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, '{ "type": "json_object" }');
+      return this.deliverablesResultVerify(deliverablesGenerateDto, data);
+    }else{
+      return data;
     }
   }
 
@@ -297,30 +305,31 @@ export class EstimationService {
           serviceScopeId: IsNull()
         }
       });
-      if(!tasksGenerateDto.retry) {
 
+      const deliverablesChunk = chunkArray(deliverables, 20);
+      for (let i = 0; i < deliverablesChunk.length; i += deliverablesChunk.length) {
+        const deliverable = deliverablesChunk[i];
+        const deliverableData = deliverable.map((deliverable) => ({
+          deliverableId: deliverable.id,
+          title: deliverable.title,
+          details: deliverable.deliverablesText
+        }));
+        await this.openai.beta.threads.messages.create(
+          tasksGenerateDto.threadId,
+          {
+            role: 'user',
+            'content': `${i === 0 ? `I am sending you my deliverable list with multiple steps. STEP-${i + 1}` : 'I am sending you my scope of work list'} : ${JSON.stringify(deliverableData)}.`
+          }
+        )
+      }
 
-        const deliverablesChunk = chunkArray(deliverables, 20);
-        for (let i = 0; i < deliverablesChunk.length; i += deliverablesChunk.length) {
-          const deliverable = deliverablesChunk[i];
-          const deliverableData = deliverable.map((deliverable) => ({
-            deliverableId: deliverable.id,
-            title: deliverable.title,
-            details: deliverable.deliverablesText
-          }));
-          await this.openai.beta.threads.messages.create(
-            tasksGenerateDto.threadId,
-            {
-              role: 'user',
-              'content': `${i === 0 ? `I am sending you my deliverable list with multiple steps. STEP-${i + 1}` : 'I am sending you my scope of work list'} : ${JSON.stringify(deliverableData)}.`
-            }
-          )
-        }
+      const result = []
+      for(const prompt of tasksGenerateDto.prompts){
         await this.openai.beta.threads.messages.create(
           tasksGenerateDto.threadId,
           {
             role: 'assistant',
-            'content': `${tasksGenerateDto.prompt}. You need to create multiple tasks and subtasks list for each deliverable`
+            'content': `${prompt}. You need to create multiple tasks and subtasks list for each deliverable`
           }
         )
 
@@ -341,25 +350,11 @@ export class EstimationService {
             `
           }
         )
-      }else{
-        await this.openai.beta.threads.messages.create(
-          tasksGenerateDto.threadId,
-          {
-            role: 'assistant', 'content': `
-              Your result is in the wrong format. Please follow the structure:
-              [
-                {
-                    "deliverableId": "deliverable id",
-                    "title": "Task title (String)",
-                    "subTasks": ["Sub Task 1 (String)", "Sub Task 2(String)", "Sub Task.... N"]
-                },
-                write other's
-              ]
-              Make sure the output structure does not change in each request.
-            `
-          }
-        )
+        let data = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
+        result.push(...await this.tasksResultVerify(tasksGenerateDto,data))
+
       }
+
       const tasks = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
       return {
         status: 200,
@@ -373,6 +368,32 @@ export class EstimationService {
       }
     }catch (e){
       console.log('e',e);
+    }
+  }
+  async tasksResultVerify(tasksGenerateDto: TasksGenerateDto,data: any){
+    if(!Array.isArray(data) || !data?.[0]?.['title']){
+      console.log('tasksResultVerify. not matched...',data);
+      await this.openai.beta.threads.messages.create(
+        tasksGenerateDto.threadId,
+        {
+          role: 'assistant', 'content': `
+              Your result is in the wrong format. Please follow the structure:
+              [
+                {
+                    "deliverableId": "deliverable id",
+                    "title": "Task title (String)",
+                    "subTasks": ["Sub Task 1 (String)", "Sub Task 2(String)", "Sub Task.... N"]
+                },
+                write other's
+              ]
+              Make sure the output structure does not change in each request.
+            `
+        }
+      )
+      data = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
+      return this.tasksResultVerify(tasksGenerateDto, data);
+    }else{
+      return data;
     }
   }
 }

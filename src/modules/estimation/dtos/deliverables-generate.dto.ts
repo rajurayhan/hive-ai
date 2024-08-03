@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 import { RetryDto } from './retry.dto';
 
 export class DeliverablesGenerateDto extends RetryDto{
@@ -13,10 +13,11 @@ export class DeliverablesGenerateDto extends RetryDto{
     @IsNotEmpty()
     assistantId: string;
 
-    @ApiProperty({ type: String })
-    @IsString()
+    @ApiProperty({ type: String, isArray: true })
+    @IsString({each: true})
+    @IsArray()
     @IsNotEmpty()
-    prompt: string;
+    prompts: string[];
 
     @ApiProperty({ type: Number })
     @IsNumber()
