@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { ArrayMinSize, IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 import { RetryDto } from './retry.dto';
+import { PromptDto } from './prompt.dto';
 
 export class DeliverablesGenerateDto extends RetryDto{
     @ApiProperty({ type: String, description: 'Thread Id' })
@@ -13,11 +14,11 @@ export class DeliverablesGenerateDto extends RetryDto{
     @IsNotEmpty()
     assistantId: string;
 
-    @ApiProperty({ type: String, isArray: true })
-    @IsString({each: true})
+    @ApiProperty({ isArray: true, type: PromptDto })
     @IsArray()
+    @ArrayMinSize(1, { message: 'Minimum 1 prompt is required' })
     @IsNotEmpty()
-    prompts: string[];
+    prompts: PromptDto[];
 
     @ApiProperty({ type: Number })
     @IsNumber()

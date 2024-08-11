@@ -9,7 +9,6 @@ import { DeliverablesGenerateDto } from '../dtos/deliverables-generate.dto';
 import { chunkArray } from '../../../common/functions';
 import { IsNull } from 'typeorm';
 import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
-import { reduce } from 'rxjs';
 
 
 @Injectable()
@@ -107,14 +106,16 @@ export class EstimationService {
     for (const prompt of transcriptGenerateDto.prompts) {
       await this.openai.beta.threads.messages.create(
         thread.id,
-        { role: 'assistant', 'content': prompt},
+        { role: 'assistant', 'content': prompt.prompt_text},
       )
-      await this.openai.beta.threads.messages.create(
-        thread.id,
-        { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'}
-      )
-      const data = await this.runThread(assistantId, thread.id);
-      output.push(data)
+      if(prompt.action_type === 'expected-output') {
+        await this.openai.beta.threads.messages.create(
+          thread.id,
+          { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'}
+        )
+        const data = await this.runThread(assistantId, thread.id);
+        output.push(data)
+      }
     }
     return {
       status: 200,
@@ -131,14 +132,16 @@ export class EstimationService {
     for (const prompt of problemAndGoalGenerateDto.prompts) {
       await this.openai.beta.threads.messages.create(
         problemAndGoalGenerateDto.threadId,
-        { role: 'assistant', 'content': prompt}
+        { role: 'assistant', 'content': prompt.prompt_text}
       )
-      await this.openai.beta.threads.messages.create(
-        problemAndGoalGenerateDto.threadId,
-        { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'}
-      )
-      const data = await this.runThread(problemAndGoalGenerateDto.assistantId, problemAndGoalGenerateDto.threadId);
-      output.push(data)
+      if(prompt.action_type === 'expected-output') {
+        await this.openai.beta.threads.messages.create(
+          problemAndGoalGenerateDto.threadId,
+          { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'}
+        )
+        const data = await this.runThread(problemAndGoalGenerateDto.assistantId, problemAndGoalGenerateDto.threadId);
+        output.push(data)
+      }
     }
 
     return {
@@ -177,24 +180,26 @@ export class EstimationService {
       for(const prompt of scopeOfWorkGenerateDto.prompts){
         await this.openai.beta.threads.messages.create(
           scopeOfWorkGenerateDto.threadId,
-          { role: 'assistant', 'content': prompt}
+          { role: 'assistant', 'content': prompt.prompt_text}
         );
-        await this.openai.beta.threads.messages.create(
-          scopeOfWorkGenerateDto.threadId,
-          { role: 'assistant', 'content': `
-            Generate a JSON response with an array of objects. Each object should have the following fixed structure:
-            [
-              {
-                  "title": "scope of work title (String)",
-                  "details": "Scope of work detail (String)"
-              },
-              write other's
-            ]
-            Make sure the output structure does not change in each request.
-          `}
-        )
-        let data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, '{ "type": "json_object" }');
-        result.push(...await this.scopeOfWorkResultVerify(scopeOfWorkGenerateDto,data))
+        if(prompt.action_type === 'expected-output') {
+          await this.openai.beta.threads.messages.create(
+            scopeOfWorkGenerateDto.threadId,
+            { role: 'assistant', 'content': `
+              Generate a JSON response with an array of objects. Each object should have the following fixed structure:
+              [
+                {
+                    "title": "scope of work title (String)",
+                    "details": "Scope of work detail (String)"
+                },
+                write other's
+              ]
+              Make sure the output structure does not change in each request.
+            `}
+          )
+          let data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, '{ "type": "json_object" }');
+          result.push(...await this.scopeOfWorkResultVerify(scopeOfWorkGenerateDto,data))
+        }
 
       }
 
@@ -236,11 +241,12 @@ export class EstimationService {
       for(const prompt of deliverablesGenerateDto.prompts){
         await this.openai.beta.threads.messages.create(
           deliverablesGenerateDto.threadId,
-          { role: 'assistant', 'content': `${prompt}`}
+          { role: 'assistant', 'content': `${prompt.prompt_text}`}
         )
-        await this.openai.beta.threads.messages.create(
-          deliverablesGenerateDto.threadId,
-          { role: 'assistant', 'content': `
+        if(prompt.action_type === 'expected-output') {
+          await this.openai.beta.threads.messages.create(
+            deliverablesGenerateDto.threadId,
+            { role: 'assistant', 'content': `
             Return a single list of JSON objects with the structure. Each object should have the following fixed structure:
             [
               {
@@ -252,9 +258,10 @@ export class EstimationService {
             ]
             Make sure the output structure does not change in each request.
           `}
-        )
-        let data = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, '{ "type": "json_object" }');
-        result.push(...await this.deliverablesResultVerify(deliverablesGenerateDto,data))
+          )
+          let data = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, '{ "type": "json_object" }');
+          result.push(...await this.deliverablesResultVerify(deliverablesGenerateDto,data))
+        }
 
       }
 
@@ -329,14 +336,14 @@ export class EstimationService {
           tasksGenerateDto.threadId,
           {
             role: 'assistant',
-            'content': `${prompt}. You need to create multiple tasks and subtasks list for each deliverable`
+            'content': `${prompt.prompt_text}. You need to create multiple tasks and subtasks list for each deliverable`
           }
         )
-
-        await this.openai.beta.threads.messages.create(
-          tasksGenerateDto.threadId,
-          {
-            role: 'assistant', 'content': `
+        if(prompt.action_type === 'expected-output') {
+          await this.openai.beta.threads.messages.create(
+            tasksGenerateDto.threadId,
+            {
+              role: 'assistant', 'content': `
               Return a single list of JSON objects with the structure. Each object should have the following fixed structure:
               [
                 {
@@ -348,11 +355,12 @@ export class EstimationService {
               ]
               Make sure the output structure does not change in each request.
             `
-          }
-        )
-        let data = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
-        result.push(...await this.tasksResultVerify(tasksGenerateDto,data))
+            }
+          )
+          let data = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
+          result.push(...await this.tasksResultVerify(tasksGenerateDto,data))
 
+        }
       }
 
       const tasks = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
