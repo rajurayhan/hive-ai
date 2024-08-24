@@ -25,4 +25,14 @@ export class TasksGenerateDto extends RetryDto{
     @IsNotEmpty()
     problemAndGoalsId: number;
 
+    @ApiProperty({ type: String, description: 'Deliverables title' })
+    @IsString()
+    @IsNotEmpty()
+    deliverableTitle: string;
+
+    @ApiProperty({ type: String, description: 'Deliverables details' })
+    @IsString()
+    @IsNotEmpty()
+    deliverablesDetails: string;
+
 }

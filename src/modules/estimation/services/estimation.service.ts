@@ -1,15 +1,72 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../../common/services/database.service';
 import OpenAI from 'openai';
+import { zodResponseFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
+
 import { TranscriptGenerateDto } from '../dtos/transcript-generate.dto';
 import { EnvConfigService } from '../../../common/services/env-config.service';
 import { ProblemAndGoalGenerateDto } from '../dtos/problem-and-goal-generate.dto';
 import { ScopeOfWorkGenerateDto } from '../dtos/scope-of-work-generate.dto';
 import { DeliverablesGenerateDto } from '../dtos/deliverables-generate.dto';
-import { chunkArray } from '../../../common/functions';
-import { IsNull } from 'typeorm';
 import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
+import { PhaseGenerateDto } from '../dtos/phase-generate.dto';
+import * as AssistantsAPI from 'openai/src/resources/beta/assistants';
 
+const PhasesResponse =   z.object({
+    phases: z.array(
+      z.object({
+        title: z.string(),
+        details: z.string(),
+      })
+    ),
+  });
+
+const SOWResponse =   z.object({
+    phaseTitle: z.string(),
+    sowList: z.array(
+      z.object({
+        title: z.string(),
+        details: z.string(),
+      })
+    ),
+  });
+
+const DeliverableResponse =   z.object({
+    sowTitle: z.string(),
+    deliverables: z.array(
+      z.object({
+        title: z.string(),
+        details: z.string(),
+      })
+    ),
+  });
+
+const TaskResponse =   z.object({
+    deliverableTitle: z.string(),
+    tasks: z.array(
+      z.object({
+        title: z.string(),
+        estimated_hours: z.number(),
+        cost: z.number(),
+        duration: z.number(),
+        duration_length: z.number(),
+        details: z.string(),
+        sub_tasks: z.array(
+          z.object({
+            title: z.string(),
+            estimated_hours: z.number(),
+            hourly_rate: z.number(),
+            cost: z.number(),
+            duration: z.number(),
+            duration_length: z.number(),
+            details: z.string(),
+            role: z.string(),
+          })
+        )
+      })
+    ),
+  });
 
 @Injectable()
 export class EstimationService {
@@ -23,186 +80,214 @@ export class EstimationService {
     });
   }
 
-  async runThread(assistantId: string , threadId: string, response_format?: string) {
+
+  async runThread(assistantId: string , threadId: string, jsonResponse?: {
+    tools: Array<AssistantsAPI.AssistantTool>,
+    response_format: z.infer<any>
+    key_name: string
+  }) {
     if (!threadId) {
       throw new Error('Thread ID is undefined or invalid');
     }
 
-
-
-    const runCreate = await this.openai.beta.threads.runs.create(threadId, {
+    const stream = await this.openai.beta.threads.runs.create(threadId, {
       assistant_id: assistantId,
-      model: 'gpt-4o',
-      ...( response_format && { response_format: {
-          type: 'json_object'
-        },
-        tools: [],
-      } )
-    })
-
-    runCreate.status
-    const runId = runCreate.id;
-
-    let runStatus = runCreate.status;
-    while (runStatus === 'queued' || runStatus === 'in_progress') {
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5 seconds
-
-      const run = await this.openai.beta.threads.runs.retrieve(threadId, runId)
-      runStatus = run.status;
-    }
-
-    if (runStatus === 'completed' || runStatus === 'incomplete') {
-
-      const messagesData = await this.openai.beta.threads.messages.list(threadId,{
-        run_id: runId
+      stream: true,
+      model: 'gpt-4o-2024-08-06',
+      ...(jsonResponse && {
+        response_format: zodResponseFormat(jsonResponse.response_format as any, jsonResponse.key_name),
+        tools: jsonResponse.tools,
       })
-      if(response_format){
-        return messagesData.data
-          .filter((msg: { role: string; }) => msg.role === 'assistant')
-          .reduce((accu, msg) => {
-            const message = msg.content.reduce((contentAccu: [], content: any) => {
-              try {
-                const jsonData = JSON.parse(content.text?.value);
-                if (Array.isArray(jsonData)) {
-                  return [...contentAccu, ...jsonData];
-                } else {
-                  const keys = Object.keys(jsonData);
-                  if (keys.length === 0) return contentAccu
-                  return [...contentAccu, ...jsonData[keys[0]]];
-                }
-              } catch {
-                return contentAccu
+    })
+    let result = jsonResponse? [] : '' ;
+    for await (const event of stream) {
+      if(event.event === 'thread.message.completed' && event.data.object=== 'thread.message'){
+        if(jsonResponse && Array.isArray(result)){
+          result.push(
+            ...event.data.content.flatMap((content)=>{
+              if(content.type === 'text'){
+                console.log('content.text.value',content.text.value);
+                return JSON.parse(content.text.value)[jsonResponse.key_name];
               }
-            }, [])
-            return [...accu, ...message];
-          }, []);
+              return []
+            })
+          );
 
-      }else{
-        return messagesData.data.filter((msg: { role: string; }) => msg.role === 'assistant')
-          .map((msg: any) => msg.content.map((content: { text: { value: any; }; }) => content.text?.value).join(' '))
-          .join('\n');
+        }else{
+          result = result + event.data.content.reduce((accue,content)=>{
+            if(content.type === 'text'){
+              return accue + content.text.value;
+            }
+            return accue
+          },'')
+
+        }
       }
-    } else {
-      return null;
     }
+    return result;
   }
 
   async transcriptGenerate(transcriptGenerateDto: TranscriptGenerateDto){
-    const assistantId = this.envConfigService.get('OPENAI_ASSISTANT_ID')
+    try {
+      const assistantId = this.envConfigService.get('OPENAI_ASSISTANT_ID')
 
-    const userInput = transcriptGenerateDto.transcripts.reduce((acc, value, index)=>{
-      if(transcriptGenerateDto.transcripts.length > 1){
-        return [...acc, { role: 'user', content: `I am sending you my transcript with multiple steps. STEP-${index} ${value}`}];
-      }else{
-        return [{ role: 'user', content: value}];
-      }
-    },[])
+      const userInput = transcriptGenerateDto.transcripts.reduce((acc, value, index)=>{
+        if(transcriptGenerateDto.transcripts.length > 1){
+          return [...acc, { role: 'user', content: `I am sending you my transcript with multiple steps. STEP-${index} ${value}`}];
+        }else{
+          return [{ role: 'user', content: value}];
+        }
+      },[])
 
-    const thread = await this.openai.beta.threads.create({
-      messages: userInput
-    })
+      const thread = await this.openai.beta.threads.create({
+        messages: userInput
+      })
 
-    const output = [];
-    for (const prompt of transcriptGenerateDto.prompts) {
-      await this.openai.beta.threads.messages.create(
-        thread.id,
-        { role: 'assistant', 'content': prompt.prompt_text},
-      )
-      if(prompt.action_type === 'expected-output') {
+      const output = [];
+      for (const prompt of transcriptGenerateDto.prompts) {
         await this.openai.beta.threads.messages.create(
           thread.id,
-          { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'}
+          { role: 'assistant', 'content': prompt.prompt_text},
         )
-        const data = await this.runThread(assistantId, thread.id);
-        output.push(data)
+        if(prompt.action_type === 'expected-output') {
+          await this.openai.beta.threads.messages.create(
+            thread.id,
+            { role: 'assistant', 'content': prompt.prompt_text}
+          )
+          const data = await this.runThread(assistantId, thread.id);
+          output.push(data)
+        }
       }
-    }
-    return {
-      status: 200,
-      data: {
-        summery: output.join('\n'),
-        threadId: thread.id,
-        assistantId,
+
+      return {
+        status: 200,
+        data: {
+          summery: output.join('\n'),
+          threadId: thread.id,
+          assistantId,
+        }
       }
+    }catch (error){
+      console.error('transcriptGenerate.error: ',error);
     }
   }
 
   async problemAndGoalGenerate(problemAndGoalGenerateDto: ProblemAndGoalGenerateDto){
-    const output = [];
-    for (const prompt of problemAndGoalGenerateDto.prompts) {
-      await this.openai.beta.threads.messages.create(
-        problemAndGoalGenerateDto.threadId,
-        { role: 'assistant', 'content': prompt.prompt_text}
-      )
-      if(prompt.action_type === 'expected-output') {
+    try{
+      const output = [];
+      for (const prompt of problemAndGoalGenerateDto.prompts) {
         await this.openai.beta.threads.messages.create(
           problemAndGoalGenerateDto.threadId,
-          { role: 'assistant', 'content': 'You will always return output in markdown format with proper line breaks.'}
+          { role: 'assistant', 'content': prompt.prompt_text}
         )
-        const data = await this.runThread(problemAndGoalGenerateDto.assistantId, problemAndGoalGenerateDto.threadId);
-        output.push(data)
+        if(prompt.action_type === 'expected-output') {
+          const data = await this.runThread(problemAndGoalGenerateDto.assistantId, problemAndGoalGenerateDto.threadId);
+          output.push(data)
+        }
       }
-    }
 
-    return {
-      status: 200,
-      data: {
-        problemAndGoals: output.join('\n'),
+      return {
+        status: 200,
+        data: {
+          problemAndGoals: output.join('\n'),
+        }
       }
+    }catch (error){
+      console.error('problemAndGoalGenerate.error: ',error);
     }
   }
-  async scopeOfWorkResultVerify(scopeOfWorkGenerateDto: ScopeOfWorkGenerateDto,data: any){
-    if(!Array.isArray(data) || !data?.[0]?.['title']){
-      console.log('scopeOfWorkResultVerify.not matched...',data);
-      await this.openai.beta.threads.messages.create(
-        scopeOfWorkGenerateDto.threadId,
-        { role: 'assistant', 'content': `
-            Your result is in the wrong format. Please follow the structure:
-            [
-              {
-                  "title": "scope of work title (String)",
-                  "details": "Scope of work detail (String)"
-              },
-              write other's
-            ]
-            Make sure the output structure does not change in each request.
-          `}
-      )
-      data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, '{ "type": "json_object" }');
-      return this.scopeOfWorkResultVerify(scopeOfWorkGenerateDto, data);
-    }else{
-      return data;
-    }
-  }
-  async scopeOfWorkGenerate(scopeOfWorkGenerateDto: ScopeOfWorkGenerateDto){
+
+  async phasesGenerate(phaseGenerateDto: PhaseGenerateDto){
     try{
       const result = []
+      for(const prompt of phaseGenerateDto.prompts){
+        if(prompt.action_type === 'expected-output') {
+          await this.openai.beta.threads.messages.create(
+            phaseGenerateDto.threadId,
+            { role: 'assistant', 'content': prompt.prompt_text}
+          );
+          const data =  await this.runThread(phaseGenerateDto.assistantId, phaseGenerateDto.threadId, {
+            key_name: 'phases',
+            tools: [],
+            response_format: PhasesResponse
+          });
+          result.push(...data);
+        }else{
+          await this.openai.beta.threads.messages.create(
+            phaseGenerateDto.threadId,
+            { role: 'assistant', 'content': prompt.prompt_text}
+          );
+        }
+      }
+
+      return {
+        status: 200,
+        data: {
+          phases: result,
+        }
+      }
+    }catch (e){
+      console.log('e',e);
+    }
+  }
+
+  async scopeOfWorkGenerate(scopeOfWorkGenerateDto: ScopeOfWorkGenerateDto){
+    try{
+      const phases = await this.databaseService.phase.find({
+        where: {
+          problemGoalID: scopeOfWorkGenerateDto.problemAndGoalsId,
+          isChecked: 1
+        }
+      });
+
+
+      const phaseData = phases.map((phase)=>({
+        phaseId: Number(phase.id),
+        title: phase.title,
+        details: phase.details
+      }));
+      await this.openai.beta.threads.messages.create(
+        scopeOfWorkGenerateDto.threadId,
+        { role: 'user', 'content': `I am sending you my phase list: ${JSON.stringify(phaseData)}.`}
+      )
+
+      const result = []
       for(const prompt of scopeOfWorkGenerateDto.prompts){
-        await this.openai.beta.threads.messages.create(
-          scopeOfWorkGenerateDto.threadId,
-          { role: 'assistant', 'content': prompt.prompt_text}
-        );
         if(prompt.action_type === 'expected-output') {
           await this.openai.beta.threads.messages.create(
             scopeOfWorkGenerateDto.threadId,
             { role: 'assistant', 'content': `
-              Generate a JSON response with an array of objects. Each object should have the following fixed structure:
-              [
+              ${prompt.prompt_text}.
+              My Phase is: 
+                title: ${scopeOfWorkGenerateDto.phaseTitle},
+                details: ${scopeOfWorkGenerateDto.phaseDetails}.
+              You have to create SOW list for the phase.
+              Use the following JSON formatting:
                 {
-                    "title": "scope of work title (String)",
-                    "details": "Scope of work detail (String)"
-                },
-                write other's
-              ]
-              Make sure the output structure does not change in each request.
+                    "phaseTitle" : "INSERT THE PHASE TITLE HERE",
+                    "sowList" : [
+                        {
+                            "title" : "SOW-to-the-point-title-GOES-HERE: SOW-descriptive-title-GOES-HERE", 
+                            "details" : "Describe the SOW"
+                        }, 
+                    ]
+                }
             `}
           )
-          let data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, '{ "type": "json_object" }');
-          result.push(...await this.scopeOfWorkResultVerify(scopeOfWorkGenerateDto,data))
+          let data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, {
+            key_name: 'sowList',
+            tools: [],
+            response_format: SOWResponse
+          });
+          result.push(...data);
+        }else{
+          await this.openai.beta.threads.messages.create(
+            scopeOfWorkGenerateDto.threadId,
+            { role: 'assistant', 'content': prompt.prompt_text}
+          );
         }
 
       }
-
       return {
         status: 200,
         data: {
@@ -216,51 +301,41 @@ export class EstimationService {
 
   async deliverablesGenerate(deliverablesGenerateDto: DeliverablesGenerateDto){
     try{
-      const scopeOfWorks = await this.databaseService.scopeOfWork.find({
-        where: {
-          problemGoalID: deliverablesGenerateDto.problemAndGoalsId,
-          serviceScopeId: IsNull()
-        }
-      });
-
-      const scopeOfWorkChunk = chunkArray(scopeOfWorks, 20);
-      for(let i = 0; i < scopeOfWorkChunk.length; i += scopeOfWorkChunk.length) {
-        const scopes= scopeOfWorkChunk[i];
-        const scopeData = scopes.map((scope)=>({
-          scopeOfWorkId:scope.id,
-          title:scope.title,
-          scopeText: scope.scopeText
-        }));
-        await this.openai.beta.threads.messages.create(
-          deliverablesGenerateDto.threadId,
-          { role: 'user', 'content': `${i===0?`I am sending you my scope of work list with multiple steps. STEP-${i+1}`:'I am sending you my scope of work list'} : ${JSON.stringify(scopeData)}.`}
-        )
-      }
-
       const result = []
       for(const prompt of deliverablesGenerateDto.prompts){
-        await this.openai.beta.threads.messages.create(
-          deliverablesGenerateDto.threadId,
-          { role: 'assistant', 'content': `${prompt.prompt_text}`}
-        )
-        if(prompt.action_type === 'expected-output') {
+        if(prompt.action_type !== 'expected-output') {
+          await this.openai.beta.threads.messages.create(
+            deliverablesGenerateDto.threadId,
+            { role: 'assistant', 'content': `${prompt.prompt_text}`}
+          )
+        }else{
           await this.openai.beta.threads.messages.create(
             deliverablesGenerateDto.threadId,
             { role: 'assistant', 'content': `
-            Return a single list of JSON objects with the structure. Each object should have the following fixed structure:
-            [
-              {
-                  "scopeOfWorkId": "Scope of work id",
-                  "title": "Deliverable title (String)",
-                  "details": "Deliverable detail (String)"
-              },
-              write other's
-            ]
-            Make sure the output structure does not change in each request.
+              ${prompt.prompt_text}.
+              My SOW is: 
+                title: ${deliverablesGenerateDto.sowTitle},
+                details: ${deliverablesGenerateDto.sowDetails}.
+              You have to create deliverable list for the SOW.
+              Use the following JSON formatting:
+                {
+                    "sowTitle" : "INSERT THE SOW TITLE HERE",
+                    "deliverables" : [
+                        {
+                            "title" : "DELIVERABLE-title-1-for-SOW-title-1-GOES-HERE: DELIVERABLE-descriptive-title-1-GOES-HERE. Responsible: TEAM-OR-TEAMS-RESPONSIBLE-GOES-HERE", 
+                            "details" : "Describe the deliverable"
+                        }, 
+                    ]
+                }
           `}
           )
-          let data = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, '{ "type": "json_object" }');
-          result.push(...await this.deliverablesResultVerify(deliverablesGenerateDto,data))
+
+          let data = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, {
+            key_name: 'deliverables',
+            tools: [],
+            response_format: DeliverableResponse
+          });
+          result.push(...data)
         }
 
       }
@@ -268,140 +343,79 @@ export class EstimationService {
       return {
         status: 200,
         data: {
-          deliverables: (result as any[]).map(deliverable=>({
-            ...deliverable,
-            scopeOfWorkId: Number(String(deliverable.scopeOfWorkId).split('-')[0]),
-          }))
-          ,
+          deliverables: result,
         }
       }
     }catch (e){
       console.log('e',e);
-    }
-  }
-  async deliverablesResultVerify(deliverablesGenerateDto: DeliverablesGenerateDto,data: any){
-    if(!Array.isArray(data) || !data?.[0]?.['title']){
-      console.log('deliverablesResultVerify. not matched...',data);
-      await this.openai.beta.threads.messages.create(
-        deliverablesGenerateDto.threadId,
-        { role: 'assistant', 'content': `
-            Your result is in the wrong format. Please follow the structure:
-            [
-              {
-                  "scopeOfWorkId": "Scope of work id",
-                  "title": "Deliverable title (String)",
-                  "details": "Deliverable detail (String)"
-              },
-              write other's
-            ]
-            Make sure the output structure does not change in each request.
-          `}
-      )
-      data = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, '{ "type": "json_object" }');
-      return this.deliverablesResultVerify(deliverablesGenerateDto, data);
-    }else{
-      return data;
     }
   }
 
   async tasksGenerate(tasksGenerateDto: TasksGenerateDto){
     try{
-      const deliverables = await this.databaseService.deliverableRepo.find({
-        where: {
-          problemGoalId: tasksGenerateDto.problemAndGoalsId,
-          serviceScopeId: IsNull()
-        }
-      });
-
-      const deliverablesChunk = chunkArray(deliverables, 20);
-      for (let i = 0; i < deliverablesChunk.length; i += deliverablesChunk.length) {
-        const deliverable = deliverablesChunk[i];
-        const deliverableData = deliverable.map((deliverable) => ({
-          deliverableId: deliverable.id,
-          title: deliverable.title,
-          details: deliverable.deliverablesText
-        }));
-        await this.openai.beta.threads.messages.create(
-          tasksGenerateDto.threadId,
-          {
-            role: 'user',
-            'content': `${i === 0 ? `I am sending you my deliverable list with multiple steps. STEP-${i + 1}` : 'I am sending you my scope of work list'} : ${JSON.stringify(deliverableData)}.`
-          }
-        )
-      }
-
       const result = []
       for(const prompt of tasksGenerateDto.prompts){
-        await this.openai.beta.threads.messages.create(
-          tasksGenerateDto.threadId,
-          {
-            role: 'assistant',
-            'content': `${prompt.prompt_text}. You need to create multiple tasks and subtasks list for each deliverable`
-          }
-        )
-        if(prompt.action_type === 'expected-output') {
+        if(prompt.action_type !== 'expected-output') {
+          await this.openai.beta.threads.messages.create(
+            tasksGenerateDto.threadId,
+            { role: 'assistant', 'content': prompt.prompt_text }
+          )
+        }else {
           await this.openai.beta.threads.messages.create(
             tasksGenerateDto.threadId,
             {
               role: 'assistant', 'content': `
-              Return a single list of JSON objects with the structure. Each object should have the following fixed structure:
-              [
+              ${prompt.prompt_text}.
+              My deliverable is: 
+                title: ${tasksGenerateDto.deliverableTitle},
+                details: ${tasksGenerateDto.deliverablesDetails}.
+              You have to create multiple Task list and multiple subtask list for the deliverable.
+              Use the following JSON formatting:
                 {
-                    "deliverableId": "deliverable id",
-                    "title": "Task title (String)",
-                    "subTasks": ["Sub Task 1 (String)", "Sub Task 2(String)", "Sub Task.... N"]
-                },
-                write other's
-              ]
-              Make sure the output structure does not change in each request.
-            `
-            }
+                    "deliverableTitle" : "INSERT THE DELIVERABLE TITLE HERE",
+                    "tasks" : [
+                        {
+                            "title" : "ParentTask-Title-GOES-HERE", 
+                            "estimated_hours" : ESTIMATED-TOTAL-AMOUNT-OF-HOURS-TO-COMPLETE-THE-PARENT-INCLUDING-ESTIMATED-TIME-OF-SUBTASKS-OF-THE-PARENT-TASK-TASK-GOES-HERE-EXCLUDING-ANY-SYMBOLS-ONLY-NUMBERS-AND-DECIMALS-ONLY, 
+                            "cost" : ESTIMATED-TOTAL-SUMMED-AMOUNT-OF-TIME-TO-COMPLETE-THE-PARENT-INCLUDING-ESTIMATED-TIME-OF-SUBTASKS-OF-THE-PARENT-TASK-TASK-GOES-HERE-EXCLUDING-ANY-SYMBOLS-ONLY-NUMBERS-AND-DECIMALS-ONLY, 
+                            "duration" : “HOW-MANY-DAYS-OR-WEEKS-TO-COMPLETE-THE-PARTICULAR-PARENT-TASK-IN-TOTAL-IF-LESS-THAN-A-WEEK-ONLY-GIVE-HOW-MANY-BUSINESS-DAYS-BUT-ONLY-SHOW-DAYS-IF-THAT'S-THE-CASE-GOES-HERE”,
+                            "duration_length" : “DAYS-OR-WEEKS-TITLE-GOES-HERE-IF-ONE-THEN-USE-SINGULAR-IF-MORE-THAN-ONE-USE-PLURAL”, 
+                            "details" : "ParentTask-DESCRIPTION-GOES-HERE",
+                            "sub_tasks" : [
+                                {
+                                    "title" : "SubTask-for-ParentTask-GOES-HERE", 
+                                    "estimated_hours" : ESTIMATED-TOTAL-AMOUNT-OF-HOURS-TO-COMPLETE-THE-SUBTASK-GOES-HERE-EXCLUDING-ANY-SYMBOLS-ONLY-NUMBERS-AND-DECIMALS-ONLY, 
+                                    "hourly_rate" : AVERAGE-HOURLY-RATE-OF-YOUR-SUGGESTED-ROLE-TO-COMPLETE-THIS-SUBTASK-GOES-HERE-EXCLUDING-ANY-SYMBOLS-ONLY-NUMBERS-AND-DECIMALS-ONLY, 
+                                    "cost" : ESTIMATED-TOTAL-AMOUNT-OF-TIME/HOURS-TO-COMPLETE-THE-SUBTASK-MULTIPLIED-BY-THE-AVERAGE-HOURLY-RATE-OF-YOUR-SUGGESTED-ROLE-TO-COMPLETE-THIS-SUBTASK-GOES-HERE-EXCLUDING-ANY-SYMBOLS-ONLY-NUMBERS-AND-DECIMALS-ONLY, 
+                                    "duration" : “NUMBER-OF-HOW-MANY-DAYS-OR-WEEKS-TO-COMPLETE-THE-PARTICULAR-SUBTASK-IN-TOTAL-IF-LESS-THAN-A-WEEK-ONLY-GIVE-HOW-MANY-BUSINESS-DAYS-BUT-ONLY-SHOW-DAYS-IF-THAT'S-THE-CASE-GOES-HERE”,
+                                    "duration_length" : “DAYS-OR-WEEKS-TITLE-GOES-HERE-IF-ONE-THEN-USE-SINGULAR-IF-MORE-THAN-ONE-USE-PLURAL”,
+                                    "details" : "SubTask-FOR-PARENT-TASK-VERY-DETAILED-DESCRIPTION-SO-THE-TEAM-KNOWS-WHAT-TO-COMPLETE-GOES-HERE",
+                                    "role" : “SUGGESTED-ROLE-THAT-SHOULD-COMPLETE-THE-SUBTASK-GOES-HERE",
+                                }
+                            ]
+                        }
+                        ...other's task
+                    ]
+                }
+            `}
           )
-          let data = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
-          result.push(...await this.tasksResultVerify(tasksGenerateDto,data))
-
+          let data = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, {
+            key_name: 'tasks',
+            tools: [],
+            response_format: TaskResponse
+          });
+          result.push(...data)
         }
       }
 
-      const tasks = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
       return {
         status: 200,
         data: {
-          tasks: (tasks as any[]).map(task=>({
-            ...task,
-            deliverableId: Number(String(task.deliverableId).split('-')[0]),
-          }))
-          ,
+          tasks: result,
         }
       }
     }catch (e){
       console.log('e',e);
-    }
-  }
-  async tasksResultVerify(tasksGenerateDto: TasksGenerateDto,data: any){
-    if(!Array.isArray(data) || !data?.[0]?.['title']){
-      console.log('tasksResultVerify. not matched...',data);
-      await this.openai.beta.threads.messages.create(
-        tasksGenerateDto.threadId,
-        {
-          role: 'assistant', 'content': `
-              Your result is in the wrong format. Please follow the structure:
-              [
-                {
-                    "deliverableId": "deliverable id",
-                    "title": "Task title (String)",
-                    "subTasks": ["Sub Task 1 (String)", "Sub Task 2(String)", "Sub Task.... N"]
-                },
-                write other's
-              ]
-              Make sure the output structure does not change in each request.
-            `
-        }
-      )
-      data = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, '{ "type": "json_object" }');
-      return this.tasksResultVerify(tasksGenerateDto, data);
-    }else{
-      return data;
     }
   }
 }

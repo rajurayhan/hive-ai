@@ -6,9 +6,11 @@ import { DeliverableEntity } from './Deliberable.entity';
 import { ProblemAndGoalEntity } from './ProblemsAndGoals.entity';
 import { ScopeOfWorkEntity } from './ScopeOfWork.entity';
 import { AssociateEntity } from './Associate.entity';
+import { PhaseEntity } from './Phase.entity';
 
 export const EntityList = [
   UserEntity,
+  PhaseEntity,
   ServiceScopesEntity,
   MeetingSummary,
   MeetingTranscriptEntity,

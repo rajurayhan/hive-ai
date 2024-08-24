@@ -6,6 +6,7 @@ import { ProblemAndGoalGenerateDto } from '../dtos/problem-and-goal-generate.dto
 import { ScopeOfWorkGenerateDto } from '../dtos/scope-of-work-generate.dto';
 import { DeliverablesGenerateDto } from '../dtos/deliverables-generate.dto';
 import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
+import { PhaseGenerateDto } from '../dtos/phase-generate.dto';
 
 @Controller('estimation')
 @ApiTags('Estimation')
@@ -31,6 +32,17 @@ export class EstimationController {
       @Body() problemAndGoalGenerateDto: ProblemAndGoalGenerateDto
     ) {
         return await this.estimationService.problemAndGoalGenerate(problemAndGoalGenerateDto);
+
+    }
+
+    @Post('phase-generate')
+    @ApiOperation({ summary: 'phase-generate' })
+    @HttpCode(HttpStatus.OK)
+    @UsePipes(new ValidationPipe({ transform: true }))
+    async phasesGenerate(
+      @Body() phaseGenerateDto: PhaseGenerateDto
+    ) {
+        return await this.estimationService.phasesGenerate(phaseGenerateDto);
 
     }
 

@@ -30,7 +30,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "mysql2": "^3.10.0",
-    "openai": "^4.48.2",
+    "openai": "^4.55.7",
     "parse-json": "v7.1.1",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
