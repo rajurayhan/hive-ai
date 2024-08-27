@@ -6,6 +6,7 @@ import { EstimationModule } from './modules/estimation/estimation.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { SchedulerModule } from './modules/schedular';
+import { ConversationModule } from './modules/conversation/conversation.module';
 
 
 @Module({
@@ -14,6 +15,7 @@ import { SchedulerModule } from './modules/schedular';
     CommonServiceModule,
     MysqlConfigModule,
     EstimationModule,
+    ConversationModule,
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     SchedulerModule

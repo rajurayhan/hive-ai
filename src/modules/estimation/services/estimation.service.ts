@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../../common/services/database.service';
 import OpenAI from 'openai';
-import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 
 import { TranscriptGenerateDto } from '../dtos/transcript-generate.dto';
@@ -11,7 +10,7 @@ import { ScopeOfWorkGenerateDto } from '../dtos/scope-of-work-generate.dto';
 import { DeliverablesGenerateDto } from '../dtos/deliverables-generate.dto';
 import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
 import { PhaseGenerateDto } from '../dtos/phase-generate.dto';
-import * as AssistantsAPI from 'openai/src/resources/beta/assistants';
+import { runThread } from '../../../common/utility/runThread';
 
 const PhasesResponse =   z.object({
     phases: z.array(
@@ -79,54 +78,7 @@ export class EstimationService {
       apiKey: this.envConfigService.get('OPENAI_API_KEY')
     });
   }
-
-
-  async runThread(assistantId: string , threadId: string, jsonResponse?: {
-    tools: Array<AssistantsAPI.AssistantTool>,
-    response_format: z.infer<any>
-    key_name: string
-  }) {
-    if (!threadId) {
-      throw new Error('Thread ID is undefined or invalid');
-    }
-
-    const stream = await this.openai.beta.threads.runs.create(threadId, {
-      assistant_id: assistantId,
-      stream: true,
-      model: 'gpt-4o-2024-08-06',
-      ...(jsonResponse && {
-        response_format: zodResponseFormat(jsonResponse.response_format as any, jsonResponse.key_name),
-        tools: jsonResponse.tools,
-      })
-    })
-    let result = jsonResponse? [] : '' ;
-    for await (const event of stream) {
-      if(event.event === 'thread.message.completed' && event.data.object=== 'thread.message'){
-        if(jsonResponse && Array.isArray(result)){
-          result.push(
-            ...event.data.content.flatMap((content)=>{
-              if(content.type === 'text'){
-                console.log('content.text.value',content.text.value);
-                return JSON.parse(content.text.value)[jsonResponse.key_name];
-              }
-              return []
-            })
-          );
-
-        }else{
-          result = result + event.data.content.reduce((accue,content)=>{
-            if(content.type === 'text'){
-              return accue + content.text.value;
-            }
-            return accue
-          },'')
-
-        }
-      }
-    }
-    return result;
-  }
-
+  
   async transcriptGenerate(transcriptGenerateDto: TranscriptGenerateDto){
     try {
       const assistantId = this.envConfigService.get('OPENAI_ASSISTANT_ID')
@@ -154,7 +106,7 @@ export class EstimationService {
             thread.id,
             { role: 'assistant', 'content': prompt.prompt_text}
           )
-          const data = await this.runThread(assistantId, thread.id);
+          const data = await runThread(this.openai, assistantId, thread.id);
           output.push(data)
         }
       }
@@ -181,7 +133,7 @@ export class EstimationService {
           { role: 'assistant', 'content': prompt.prompt_text}
         )
         if(prompt.action_type === 'expected-output') {
-          const data = await this.runThread(problemAndGoalGenerateDto.assistantId, problemAndGoalGenerateDto.threadId);
+          const data = await runThread(this.openai, problemAndGoalGenerateDto.assistantId, problemAndGoalGenerateDto.threadId);
           output.push(data)
         }
       }
@@ -206,7 +158,7 @@ export class EstimationService {
             phaseGenerateDto.threadId,
             { role: 'assistant', 'content': prompt.prompt_text}
           );
-          const data =  await this.runThread(phaseGenerateDto.assistantId, phaseGenerateDto.threadId, {
+          const data =  await runThread(this.openai, phaseGenerateDto.assistantId, phaseGenerateDto.threadId, {
             key_name: 'phases',
             tools: [],
             response_format: PhasesResponse
@@ -274,7 +226,7 @@ export class EstimationService {
                 }
             `}
           )
-          let data = await this.runThread(scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, {
+          let data = await runThread(this.openai, scopeOfWorkGenerateDto.assistantId, scopeOfWorkGenerateDto.threadId, {
             key_name: 'sowList',
             tools: [],
             response_format: SOWResponse
@@ -330,7 +282,7 @@ export class EstimationService {
           `}
           )
 
-          let data = await this.runThread(deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, {
+          let data = await runThread(this.openai, deliverablesGenerateDto.assistantId, deliverablesGenerateDto.threadId, {
             key_name: 'deliverables',
             tools: [],
             response_format: DeliverableResponse
@@ -399,7 +351,7 @@ export class EstimationService {
                 }
             `}
           )
-          let data = await this.runThread(tasksGenerateDto.assistantId, tasksGenerateDto.threadId, {
+          let data = await runThread(this.openai, tasksGenerateDto.assistantId, tasksGenerateDto.threadId, {
             key_name: 'tasks',
             tools: [],
             response_format: TaskResponse

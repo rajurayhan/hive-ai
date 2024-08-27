@@ -13,6 +13,7 @@ export const EnvironmentVariablesValidation = z.object({
   DATABASE_DB: z.string().min(1),
   TLDV_API_KEY: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
+  OPENAI_CONVERSATION_ID: z.string().min(1),
   OPENAI_ASSISTANT_ID: z.string().min(1),
   PAYROLL_USER_X_AUTH_USER: z.string().min(1),
   PAYROLL_USER_X_AUTH_TOKEN: z.string().min(1),
