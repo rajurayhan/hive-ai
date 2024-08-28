@@ -27,15 +27,23 @@ export class ConversationService {
       const assistantId = this.envConfigService.get('OPENAI_CONVERSATION_ID');
 
       const thread = await this.openai.beta.threads.create({
-        messages: splitTextIntoChunks(conversationGenerateDto.prompt, MAX_LENGTH).map(prompt => (
-          {
+        messages: [
+          ...splitTextIntoChunks(conversationGenerateDto.prompt, MAX_LENGTH).map(prompt => (
+            {
+              role: 'user',
+              content: prompt
+            }
+          )) as { role: 'user' | 'assistant', content: string }[],
+          ...(conversationGenerateDto.prompt2 && [{
             role: 'user',
-            content: prompt
-          }
-        )),
+            content: conversationGenerateDto.prompt2
+          }] as { role: 'user' | 'assistant', content: string }[])
+
+        ],
       })
 
       const data = await runThread(this.openai, assistantId, thread.id);
+      console.log('data',data);
 
       return {
         status: 200,
@@ -52,11 +60,17 @@ export class ConversationService {
   async conversationContinue(conversationContinueDto: ConversationContinueDto){
     try {
       const assistantId = conversationContinueDto.assistantId;
-
       await this.openai.beta.threads.messages.create(
         conversationContinueDto.threadId,
         { role: 'user', 'content': conversationContinueDto.prompt}
       )
+
+      if(conversationContinueDto.prompt2){
+        await this.openai.beta.threads.messages.create(
+          conversationContinueDto.threadId,
+          { role: 'user', 'content': conversationContinueDto.prompt2}
+        )
+      }
 
       const data = await runThread(this.openai, assistantId, conversationContinueDto.threadId);
       return {
