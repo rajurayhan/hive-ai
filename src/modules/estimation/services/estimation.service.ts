@@ -10,7 +10,7 @@ import { ScopeOfWorkGenerateDto } from '../dtos/scope-of-work-generate.dto';
 import { DeliverablesGenerateDto } from '../dtos/deliverables-generate.dto';
 import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
 import { PhaseGenerateDto } from '../dtos/phase-generate.dto';
-import { runThread } from '../../../common/utility/runThread';
+import { runThread } from '../../../common/utility';
 
 const PhasesResponse =   z.object({
     phases: z.array(

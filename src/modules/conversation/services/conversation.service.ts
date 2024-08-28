@@ -1,12 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../../common/services/database.service';
 import OpenAI from 'openai';
-import { z } from 'zod';
 
 import { EnvConfigService } from '../../../common/services/env-config.service';
-import { runThread } from '../../../common/utility/runThread';
+import { runThread } from '../../../common/utility';
 import { ConversationGenerateDto } from '../dtos/conversation-generate.dto';
 import { ConversationContinueDto } from '../dtos/conversation-continue.dto';
+import { MAX_LENGTH, splitTextIntoChunks } from '../../../common/utility';
 
 @Injectable()
 export class ConversationService {
@@ -27,13 +27,16 @@ export class ConversationService {
       const assistantId = this.envConfigService.get('OPENAI_CONVERSATION_ID');
 
       const thread = await this.openai.beta.threads.create({
-        messages: [{
-          role: 'user',
-          content: conversationGenerateDto.prompt
-        }]
+        messages: splitTextIntoChunks(conversationGenerateDto.prompt, MAX_LENGTH).map(prompt => (
+          {
+            role: 'user',
+            content: prompt
+          }
+        )),
       })
 
       const data = await runThread(this.openai, assistantId, thread.id);
+
       return {
         status: 200,
         data: {
