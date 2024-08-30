@@ -43,7 +43,6 @@ export class ConversationService {
       })
 
       const data = await runThread(this.openai, assistantId, thread.id);
-      console.log('data',data);
 
       return {
         status: 200,

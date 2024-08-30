@@ -179,7 +179,7 @@ export class EstimationService {
         }
       }
     }catch (e){
-      console.log('e',e);
+      console.log('phasesGenerate.error',e);
     }
   }
 
@@ -247,7 +247,7 @@ export class EstimationService {
         }
       }
     }catch (e){
-      console.log('e',e);
+      console.log('scopeOfWorkGenerate.e',e);
     }
   }
 
@@ -299,7 +299,7 @@ export class EstimationService {
         }
       }
     }catch (e){
-      console.log('e',e);
+      console.log('deliverablesGenerate.e',e);
     }
   }
 
@@ -367,7 +367,7 @@ export class EstimationService {
         }
       }
     }catch (e){
-      console.log('e',e);
+      console.log('tasksGenerate.e',e);
     }
   }
 }
