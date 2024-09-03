@@ -11,6 +11,7 @@ import { DeliverablesGenerateDto } from '../dtos/deliverables-generate.dto';
 import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
 import { PhaseGenerateDto } from '../dtos/phase-generate.dto';
 import { runThread } from '../../../common/utility';
+import { ProjectOverviewGenerateDto } from '../dtos/project-overview-generate.dto';
 
 const PhasesResponse =   z.object({
     phases: z.array(
@@ -142,6 +143,30 @@ export class EstimationService {
         status: 200,
         data: {
           problemAndGoals: output.join('\n'),
+        }
+      }
+    }catch (error){
+      console.error('problemAndGoalGenerate.error: ',error);
+    }
+  }
+  async projectOverviewGenerate(projectOverviewGenerateDto: ProjectOverviewGenerateDto){
+    try{
+      const output = [];
+      for (const prompt of projectOverviewGenerateDto.prompts) {
+        await this.openai.beta.threads.messages.create(
+          projectOverviewGenerateDto.threadId,
+          { role: 'assistant', 'content': prompt.prompt_text}
+        )
+        if(prompt.action_type === 'expected-output') {
+          const data = await runThread(this.openai, projectOverviewGenerateDto.assistantId, projectOverviewGenerateDto.threadId);
+          output.push(data)
+        }
+      }
+
+      return {
+        status: 200,
+        data: {
+          projectOverview: output.join('\n'),
         }
       }
     }catch (error){
