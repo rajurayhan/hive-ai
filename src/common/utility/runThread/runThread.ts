@@ -27,7 +27,6 @@ export async function runThread(openai, assistantId: string , threadId: string, 
         result.push(
           ...event.data.content.flatMap((content)=>{
             if(content.type === 'text'){
-              console.log('content.text.value',content.text.value);
               return JSON.parse(content.text.value)[jsonResponse.key_name];
             }
             return []
@@ -42,6 +41,10 @@ export async function runThread(openai, assistantId: string , threadId: string, 
           return accue
         },'')
 
+      }
+    }else if(event.event==='thread.run.failed'){
+      if(event.data.last_error.code==='rate_limit_exceeded'){
+        console.log('errro.rate_limit_exceeded');
       }
     }
   }

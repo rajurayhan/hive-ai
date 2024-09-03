@@ -238,7 +238,6 @@ export class EstimationService {
             { role: 'assistant', 'content': prompt.prompt_text}
           );
         }
-
       }
       return {
         status: 200,
