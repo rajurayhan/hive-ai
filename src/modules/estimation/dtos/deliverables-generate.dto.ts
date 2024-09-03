@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayMinSize, IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { ArrayMinSize, IsArray, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 import { RetryDto } from './retry.dto';
 import { PromptDto } from './prompt.dto';
 
@@ -32,7 +32,7 @@ export class DeliverablesGenerateDto extends RetryDto{
 
     @ApiProperty({ type: String, description: 'SOW details' })
     @IsString()
-    @IsNotEmpty()
+    @IsOptional()
     sowDetails: string;
 
 }

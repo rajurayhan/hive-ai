@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayMinSize, IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { ArrayMinSize, IsArray, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 import { RetryDto } from './retry.dto';
 import { PromptDto } from './prompt.dto';
 
@@ -32,7 +32,7 @@ export class ScopeOfWorkGenerateDto{
 
     @ApiProperty({ type: String, description: 'Phase details' })
     @IsString()
-    @IsNotEmpty()
+    @IsOptional()
     phaseDetails: string;
 
 

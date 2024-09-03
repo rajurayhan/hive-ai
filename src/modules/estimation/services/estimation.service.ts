@@ -212,7 +212,7 @@ export class EstimationService {
               ${prompt.prompt_text}.
               My Phase is: 
                 title: ${scopeOfWorkGenerateDto.phaseTitle},
-                details: ${scopeOfWorkGenerateDto.phaseDetails}.
+                ${scopeOfWorkGenerateDto.phaseDetails? `details: ${scopeOfWorkGenerateDto.phaseDetails}.`:''}
               You have to create SOW list for the phase.
               Use the following JSON formatting:
                 {
@@ -267,7 +267,7 @@ export class EstimationService {
               ${prompt.prompt_text}.
               My SOW is: 
                 title: ${deliverablesGenerateDto.sowTitle},
-                details: ${deliverablesGenerateDto.sowDetails}.
+                ${deliverablesGenerateDto.sowDetails? `details: ${deliverablesGenerateDto.sowDetails}.`:''}
               You have to create deliverable list for the SOW.
               Use the following JSON formatting:
                 {
@@ -320,7 +320,7 @@ export class EstimationService {
               ${prompt.prompt_text}.
               My deliverable is: 
                 title: ${tasksGenerateDto.deliverableTitle},
-                details: ${tasksGenerateDto.deliverablesDetails}.
+                ${tasksGenerateDto.deliverablesDetails? `details: ${tasksGenerateDto.deliverablesDetails}.`:''}
               You have to create multiple Task list and multiple subtask list for the deliverable.
               Use the following JSON formatting:
                 {
