@@ -107,7 +107,7 @@ export class EstimationService {
           output.push(data)
         }
       }
-      console.log('step.meetingSummeryGenerate..........4')
+      console.log('step.meetingSummeryGenerate..........4',output)
       return {
         status: 200,
         data: {
