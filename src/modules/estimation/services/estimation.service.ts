@@ -83,15 +83,13 @@ export class EstimationService {
   
   async meetingSummeryGenerate(meetingSummeryGenerateDto: MeetingSummeryGenerateDto){
     try {
-      console.log('step.meetingSummeryGenerate..........1',meetingSummeryGenerateDto);
       const assistantId = this.envConfigService.get('OPENAI_ASSISTANT_ID')
-      console.log('step.meetingSummeryGenerate..........2')
+
       const thread = await this.openai.beta.threads.create({
         messages: [
           { role: 'user', content: meetingSummeryGenerateDto.transcript }
         ]
       })
-      console.log('step.meetingSummeryGenerate..........3')
       const output = [];
       for (const prompt of meetingSummeryGenerateDto.prompts) {
         await this.openai.beta.threads.messages.create(
@@ -107,7 +105,7 @@ export class EstimationService {
           output.push(data)
         }
       }
-      console.log('step.meetingSummeryGenerate..........4',output)
+
       return {
         status: 200,
         data: {

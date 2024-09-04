@@ -22,7 +22,6 @@ export async function runThread(openai, assistantId: string , threadId: string, 
   })
   let result = jsonResponse? [] : '' ;
   for await (const event of stream) {
-    console.log(event);
     if(event.event === 'thread.message.completed' && event.data.object=== 'thread.message'){
       if(jsonResponse && Array.isArray(result)){
         result.push(
