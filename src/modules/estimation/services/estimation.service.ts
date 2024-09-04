@@ -12,6 +12,7 @@ import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
 import { PhaseGenerateDto } from '../dtos/phase-generate.dto';
 import { runThread } from '../../../common/utility';
 import { ProjectOverviewGenerateDto } from '../dtos/project-overview-generate.dto';
+import { MeetingSummeryGenerateDto } from '../dtos/meeting-summery-generate.dto';
 
 const PhasesResponse =   z.object({
     phases: z.array(
@@ -80,6 +81,43 @@ export class EstimationService {
     });
   }
   
+  async meetingSummeryGenerate(meetingSummeryGenerateDto: MeetingSummeryGenerateDto){
+    try {
+      const assistantId = this.envConfigService.get('OPENAI_ASSISTANT_ID')
+
+      const thread = await this.openai.beta.threads.create({
+        messages: [
+          { role: 'user', content: meetingSummeryGenerateDto.transcript }
+        ]
+      })
+
+      const output = [];
+      for (const prompt of meetingSummeryGenerateDto.prompts) {
+        await this.openai.beta.threads.messages.create(
+          thread.id,
+          { role: 'assistant', 'content': prompt.prompt_text},
+        )
+        if(prompt.action_type === 'expected-output') {
+          await this.openai.beta.threads.messages.create(
+            thread.id,
+            { role: 'assistant', 'content': prompt.prompt_text}
+          )
+          const data = await runThread(this.openai, assistantId, thread.id);
+          output.push(data)
+        }
+      }
+      return {
+        status: 200,
+        data: {
+          summery: output.join('\n'),
+          threadId: thread.id,
+          assistantId,
+        }
+      }
+    }catch (error){
+      console.error('transcriptGenerate.error: ',error);
+    }
+  }
   async transcriptGenerate(transcriptGenerateDto: TranscriptGenerateDto){
     try {
       const assistantId = this.envConfigService.get('OPENAI_ASSISTANT_ID')

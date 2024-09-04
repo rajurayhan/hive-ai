@@ -8,6 +8,7 @@ import { DeliverablesGenerateDto } from '../dtos/deliverables-generate.dto';
 import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
 import { PhaseGenerateDto } from '../dtos/phase-generate.dto';
 import { ProjectOverviewGenerateDto } from '../dtos/project-overview-generate.dto';
+import { MeetingSummeryGenerateDto } from '../dtos/meeting-summery-generate.dto';
 
 @Controller('estimation')
 @ApiTags('Estimation')
@@ -22,6 +23,17 @@ export class EstimationController {
       @Body() transcriptGenerateDto: TranscriptGenerateDto
     ) {
         return await this.estimationService.transcriptGenerate(transcriptGenerateDto);
+
+    }
+
+    @Post('meeting-summery-generate')
+    @ApiOperation({ summary: 'meeting-summery-generate' })
+    @HttpCode(HttpStatus.OK)
+    @UsePipes(new ValidationPipe({ transform: true }))
+    async meetingSummeryGenerate(
+      @Body() meetingSummeryGenerateDto: MeetingSummeryGenerateDto
+    ) {
+        return await this.estimationService.meetingSummeryGenerate(meetingSummeryGenerateDto);
 
     }
 
