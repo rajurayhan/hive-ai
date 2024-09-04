@@ -7,8 +7,9 @@ import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  //const server = app.getHttpServer()
-  //server.setTimeout(1000*60*5); //5 minutes
+  const server = app.getHttpServer()
+  server.setTimeout(1000*60*10); //5 minutes
+
   app.use(bodyParser.json({limit: '50mb'}));
   app.use(bodyParser.urlencoded({limit: '50mb', extended: true}));
   const configService = app.get(EnvConfigService);
