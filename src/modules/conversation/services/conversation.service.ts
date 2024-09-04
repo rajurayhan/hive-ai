@@ -1,18 +1,15 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { DatabaseService } from '../../../common/services/database.service';
 import OpenAI from 'openai';
 
 import { EnvConfigService } from '../../../common/services/env-config.service';
-import { runThread } from '../../../common/utility';
+import { MAX_LENGTH, runThread, splitTextIntoChunks } from '../../../common/utility';
 import { ConversationGenerateDto } from '../dtos/conversation-generate.dto';
 import { ConversationContinueDto } from '../dtos/conversation-continue.dto';
-import { MAX_LENGTH, splitTextIntoChunks } from '../../../common/utility';
 
 @Injectable()
 export class ConversationService {
   private openai: OpenAI;
   constructor(
-      private databaseService: DatabaseService,
       private envConfigService: EnvConfigService,
   ) {
     this.openai = new OpenAI({
@@ -34,10 +31,10 @@ export class ConversationService {
               content: prompt
             }
           )) as { role: 'user' | 'assistant', content: string }[],
-          ...(conversationGenerateDto.prompt2 && [{
+          ...(Boolean(conversationGenerateDto.prompt2) ? [{
             role: 'user',
             content: conversationGenerateDto.prompt2
-          }] as { role: 'user' | 'assistant', content: string }[])
+          }] as { role: 'user' | 'assistant', content: string }[] : [])
 
         ],
       })
