@@ -78,6 +78,7 @@ export class ConversationService {
         }
       }
     }catch (error){
+      console.log('error',error);
       throw new BadRequestException(`Can't generate the conversation`);
     }
   }
