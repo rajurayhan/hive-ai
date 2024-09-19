@@ -6,11 +6,10 @@ export async function runThread(openai, assistantId: string , threadId: string, 
   tools: Array<AssistantsAPI.AssistantTool>,
   response_format: z.infer<any>
   key_name: string
-}) {
+}, functionCall?: Object) {
   if (!threadId) {
     throw new Error('Thread ID is undefined or invalid');
   }
-
   const stream = await openai.beta.threads.runs.create(threadId, {
     assistant_id: assistantId,
     stream: true,
@@ -22,7 +21,6 @@ export async function runThread(openai, assistantId: string , threadId: string, 
   })
   let result = jsonResponse? [] : '' ;
   for await (const event of stream) {
-    console.log('event',event);
     if(event.event === 'thread.message.completed' && event.data.object=== 'thread.message'){
       if(jsonResponse && Array.isArray(result)){
         result.push(

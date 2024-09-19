@@ -13,6 +13,7 @@ import { PhaseGenerateDto } from '../dtos/phase-generate.dto';
 import { runThread } from '../../../common/utility';
 import { ProjectOverviewGenerateDto } from '../dtos/project-overview-generate.dto';
 import { MeetingSummeryGenerateDto } from '../dtos/meeting-summery-generate.dto';
+import { RoleGenerateDto } from '../dtos/role-generate.dto';
 
 const PhasesResponse =   z.object({
     phases: z.array(
@@ -39,6 +40,15 @@ const DeliverableResponse =   z.object({
       z.object({
         title: z.string(),
         details: z.string(),
+      })
+    ),
+  });
+
+const RoleResponse =   z.object({
+    roles: z.array(
+      z.object({
+        name: z.string(),
+        averageHourlyRate: z.number()
       })
     ),
   });
@@ -364,7 +374,41 @@ export class EstimationService {
       console.log('deliverablesGenerate.e',e);
     }
   }
+  async roleGenerate(roleGenerateDto: RoleGenerateDto){
+    try{
+      await this.openai.beta.threads.messages.create(
+        roleGenerateDto.threadId,
+        { role: 'assistant', 'content': `    
+          I need your assistance in defining roles for the project. I have a list of deliverables and an existing set of roles that I'm considering. Please use these to generate a complete list of roles necessary for the project. If there are additional roles you think we might need, feel free to append them to the list based on the deliverables provided.
 
+          Here are the roles I have in mind, along with their average hourly rates:
+          ${JSON.stringify(roleGenerateDto.existingRoles)}
+          
+          Use this list in conjunction with my deliverables to ensure all necessary project roles are covered. Please provide a detailed and justified list of roles tailored to the deliverables, suggesting any additional roles that may be necessary.
+          `}
+      )
+
+
+      let data = await runThread(
+        this.openai,
+        roleGenerateDto.assistantId,
+        roleGenerateDto.threadId,
+        {
+          key_name: 'roles',
+          tools: [],
+          response_format: RoleResponse
+        });
+
+      return {
+        status: 200,
+        data: {
+          roles: data,
+        }
+      }
+    }catch (e){
+      console.log('roleGenerate.e',e);
+    }
+  }
   async tasksGenerate(tasksGenerateDto: TasksGenerateDto){
     try{
       const result = []

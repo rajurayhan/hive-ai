@@ -9,6 +9,7 @@ import { TasksGenerateDto } from '../dtos/tasks-generate.dto';
 import { PhaseGenerateDto } from '../dtos/phase-generate.dto';
 import { ProjectOverviewGenerateDto } from '../dtos/project-overview-generate.dto';
 import { MeetingSummeryGenerateDto } from '../dtos/meeting-summery-generate.dto';
+import { RoleGenerateDto } from '../dtos/role-generate.dto';
 
 @Controller('estimation')
 @ApiTags('Estimation')
@@ -89,6 +90,17 @@ export class EstimationController {
       @Body() deliverablesGenerateDto: DeliverablesGenerateDto
     ) {
         return await this.estimationService.deliverablesGenerate(deliverablesGenerateDto);
+
+    }
+
+    @Post('role-generate')
+    @ApiOperation({ summary: 'role-generate' })
+    @HttpCode(HttpStatus.OK)
+    @UsePipes(new ValidationPipe({ transform: true }))
+    async roleGenerate(
+      @Body() roleGenerateDto: RoleGenerateDto
+    ) {
+      return await this.estimationService.roleGenerate(roleGenerateDto);
 
     }
 
