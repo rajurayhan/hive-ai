@@ -3,7 +3,7 @@ import { ArrayMinSize, IsArray, IsNotEmpty, IsString } from 'class-validator';
 import { RetryDto } from './retry.dto';
 import { PromptDto } from './prompt.dto';
 
-export class ProblemAndGoalGenerateDto extends RetryDto{
+export class ProblemAndGoalGenerateDto{
     @ApiProperty({ type: String, description: 'Thread Id' })
     @IsString()
     @IsNotEmpty()

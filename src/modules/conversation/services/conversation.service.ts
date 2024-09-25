@@ -55,7 +55,6 @@ export class ConversationService {
   }
   async conversationContinue(conversationContinueDto: ConversationContinueDto){
     try {
-      console.log('conversationContinueDto',conversationContinueDto);
       const assistantId = conversationContinueDto.assistantId;
       await this.openai.beta.threads.messages.create(
         conversationContinueDto.threadId,

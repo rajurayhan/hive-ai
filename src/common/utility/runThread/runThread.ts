@@ -43,7 +43,7 @@ export async function runThread(openai, assistantId: string , threadId: string, 
       }
     }else if(event.event==='thread.run.failed'){
       if(event.data.last_error.code==='rate_limit_exceeded'){
-        console.log('errro.rate_limit_exceeded');
+        console.log('error.rate_limit_exceeded');
       }
     }
   }
